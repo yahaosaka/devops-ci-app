@@ -108,3 +108,29 @@ jobs:
         run: |
           docker push "${IMAGE_NAME}:${GITHUB_SHA}"
           docker push "${IMAGE_NAME}:latest"
+
+  deploy:
+    needs: image
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, devops-vm]
+    permissions:
+      contents: read
+    concurrency:
+      group: deploy-devops-vm
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Deploy with Ansible
+        working-directory: ansible
+        run: ansible-playbook site.yml -e "app_tag=$GITHUB_SHA"
+      - name: Check through Nginx
+        working-directory: ansible
+        run: |
+          set -euo pipefail
+          vm_url=$(ansible-inventory --host devops-vm | python3 -c 'import json,sys; vm=json.load(sys.stdin); print("http://{}:{}".format(vm["ansible_host"], vm.get("app_proxy_port", 80)))')
+          curl --fail --silent --show-error --retry 5 --max-time 10 "$vm_url/health" |
+            python3 -c 'import json,sys; assert json.load(sys.stdin) == {"status": "ok"}'
+          curl --fail --silent --show-error --max-time 10 "$vm_url/"
