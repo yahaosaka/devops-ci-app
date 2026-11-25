@@ -7,7 +7,7 @@ def create_app():
     application = Flask(__name__)
     @application.get("/health")
     def health():
-        """Возвращает результат простой проверки жизнеспособности."""
+        """Возвращает статус проверки жизнеспособности."""
         return jsonify(status="ok")
     @application.get("/")
     def index():
